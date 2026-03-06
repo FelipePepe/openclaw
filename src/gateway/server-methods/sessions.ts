@@ -584,4 +584,47 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       undefined,
     );
   },
+
+  "sessions.compaction-summary": ({ params, respond }) => {
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const { target } = resolveGatewaySessionTargetFromKey(key);
+    const candidates = resolveSessionTranscriptCandidates({ cfg: loadConfig(), target });
+    const sessionFile = candidates[0];
+    if (!sessionFile || !fs.existsSync(sessionFile)) {
+      respond(true, { summary: null, compactedAt: null }, undefined);
+      return;
+    }
+    try {
+      const lines = fs.readFileSync(sessionFile, "utf8").split("\n");
+      let lastSummary: string | null = null;
+      let lastCompactedAt: number | null = null;
+      for (const line of lines) {
+        if (!line.trim()) {
+          continue;
+        }
+        try {
+          const entry = JSON.parse(line) as { type?: string; summary?: string; timestamp?: number };
+          if (entry.type === "compaction" && typeof entry.summary === "string") {
+            lastSummary = entry.summary;
+            lastCompactedAt = typeof entry.timestamp === "number" ? entry.timestamp : null;
+          }
+        } catch {
+          // skip malformed lines
+        }
+      }
+      respond(true, { summary: lastSummary, compactedAt: lastCompactedAt }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to read session transcript: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
+  },
 };

@@ -690,6 +690,7 @@ export async function compactEmbeddedPiSessionDirect(
                 tokenCount: tokensAfter,
                 compactedCount: limited.length - session.messages.length,
                 sessionFile: params.sessionFile,
+                summary: typeof result.summary === "string" ? result.summary : undefined,
               },
               hookCtx,
             )
