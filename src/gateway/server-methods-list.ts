@@ -47,6 +47,7 @@ const BASE_METHODS = [
   "skills.bins",
   "skills.install",
   "skills.update",
+  "skills.scan",
   "update.run",
   "voicewake.get",
   "voicewake.set",
@@ -98,6 +99,13 @@ const BASE_METHODS = [
   "runs.list",
   // Session compaction checkpoint
   "sessions.compaction-summary",
+  // Session token budget visibility
+  "sessions.token-pressure",
+  "sessions.bootstrap-size",
+  // Tool call audit log
+  "tools.audit",
+  // Memory auto-inject from Engram
+  "sessions.memory-inject",
 ];
 
 export function listGatewayMethods(): string[] {

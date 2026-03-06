@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {
   listAgentIds,
   resolveAgentWorkspaceDir,
@@ -6,6 +7,7 @@ import {
 import { installSkill } from "../../agents/skills-install.js";
 import { buildWorkspaceSkillStatus } from "../../agents/skills-status.js";
 import { loadWorkspaceSkillEntries, type SkillEntry } from "../../agents/skills.js";
+import { scanDirectoryWithSummary } from "../../security/skill-scanner.js";
 import { listAgentWorkspaceDirs } from "../../agents/workspace-dirs.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
@@ -200,5 +202,80 @@ export const skillsHandlers: GatewayRequestHandlers = {
     };
     await writeConfigFile(nextConfig);
     respond(true, { ok: true, skillKey: p.skillKey, config: current }, undefined);
+  },
+
+  "skills.scan": async ({ params, respond }) => {
+    const slug = typeof params.slug === "string" ? params.slug.trim() : "";
+    if (!slug) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "slug required"));
+      return;
+    }
+    const cfg = loadConfig();
+    const agentId = resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+
+    let entries: SkillEntry[];
+    try {
+      entries = await loadWorkspaceSkillEntries(workspaceDir, cfg);
+    } catch {
+      entries = [];
+    }
+
+    const matched = entries.find(
+      (e) => e.skill.name === slug || e.metadata?.skillKey === slug,
+    );
+
+    if (!matched) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `skill "${slug}" not found in workspace`),
+      );
+      return;
+    }
+
+    const baseDir = matched.skill.baseDir?.trim();
+    if (!baseDir) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INTERNAL, `skill "${slug}" has no base directory`),
+      );
+      return;
+    }
+
+    try {
+      const summary = await scanDirectoryWithSummary(baseDir);
+      let contentPreview = "";
+      if (matched.skill.filePath) {
+        try {
+          contentPreview = fs.readFileSync(matched.skill.filePath, "utf-8").slice(0, 500);
+        } catch {
+          contentPreview = "";
+        }
+      }
+      respond(
+        true,
+        {
+          slug,
+          scannedFiles: summary.scannedFiles,
+          critical: summary.critical,
+          warn: summary.warn,
+          info: summary.info,
+          findings: summary.findings,
+          contentPreview,
+        },
+        undefined,
+      );
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Scan failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
   },
 };

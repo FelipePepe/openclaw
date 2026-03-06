@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import path from "node:path";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../../agents/agent-scope.js";
 import { clearBootstrapSnapshot } from "../../agents/bootstrap-cache.js";
+import { resolveContextTokensForModel } from "../../agents/context.js";
+import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
+import { loadWorkspaceBootstrapFiles } from "../../agents/workspace.js";
 import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../agents/pi-embedded.js";
 import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
 import { clearSessionQueues } from "../../auto-reply/reply/queue.js";
@@ -626,5 +633,212 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         ),
       );
     }
+  },
+
+  "sessions.token-pressure": async ({ params, respond }) => {
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const cfg = loadConfig();
+    const { target, storePath } = resolveGatewaySessionTargetFromKey(key);
+    const store = loadSessionStore(storePath);
+    const entry = target.storeKeys.map((k) => store[k]).find(Boolean);
+    const sessionId = entry?.sessionId;
+
+    // Read transcript
+    let toolResultChars = 0;
+    let conversationChars = 0;
+    if (sessionId) {
+      const filePath = resolveSessionTranscriptCandidates(
+        sessionId,
+        storePath,
+        entry?.sessionFile,
+        target.agentId,
+      ).find((c) => fs.existsSync(c));
+      if (filePath) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        for (const line of raw.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const parsed = JSON.parse(trimmed) as { role?: string; type?: string };
+            const isToolResult =
+              parsed.role === "tool" ||
+              parsed.role === "toolResult" ||
+              parsed.type === "tool_result";
+            if (isToolResult) {
+              toolResultChars += trimmed.length;
+            } else {
+              conversationChars += trimmed.length;
+            }
+          } catch {
+            conversationChars += trimmed.length;
+          }
+        }
+      }
+    }
+
+    // Read workspace bootstrap files for systemPrompt + workspaceFiles chars
+    const agentId = target.agentId ?? resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    let systemPromptChars = 0;
+    let workspaceFilesChars = 0;
+    try {
+      const bootstrapFiles = await loadWorkspaceBootstrapFiles(workspaceDir);
+      for (const f of bootstrapFiles) {
+        if (f.missing || !f.content) continue;
+        const len = f.content.length;
+        if (f.name === "AGENTS.md" || f.name === "SOUL.md") {
+          systemPromptChars += len;
+        } else {
+          workspaceFilesChars += len;
+        }
+      }
+    } catch {
+      // ignore workspace read errors
+    }
+
+    const totalChars = systemPromptChars + workspaceFilesChars + toolResultChars + conversationChars;
+    const resolvedModel = entry?.model?.trim() || undefined;
+    const contextTokens =
+      resolveContextTokensForModel({ cfg, model: resolvedModel }) ?? DEFAULT_CONTEXT_TOKENS;
+    const contextWindowChars = contextTokens * 4;
+
+    function pct(chars: number) {
+      return contextWindowChars > 0
+        ? Math.round((chars / contextWindowChars) * 1000) / 10
+        : 0;
+    }
+
+    respond(
+      true,
+      {
+        totalChars,
+        contextWindowChars,
+        pressurePercent: pct(totalChars),
+        breakdown: {
+          systemPrompt: { chars: systemPromptChars, percent: pct(systemPromptChars) },
+          workspaceFiles: { chars: workspaceFilesChars, percent: pct(workspaceFilesChars) },
+          toolResults: { chars: toolResultChars, percent: pct(toolResultChars) },
+          conversation: { chars: conversationChars, percent: pct(conversationChars) },
+        },
+      },
+      undefined,
+    );
+  },
+
+  "sessions.bootstrap-size": async ({ params, respond }) => {
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const cfg = loadConfig();
+    const { target } = resolveGatewaySessionTargetFromKey(key);
+    const agentId = target.agentId ?? resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+
+    try {
+      const bootstrapFiles = await loadWorkspaceBootstrapFiles(workspaceDir);
+      const files = bootstrapFiles
+        .filter((f) => !f.missing && f.content)
+        .map((f) => ({ path: f.path, sizeChars: (f.content ?? "").length }));
+      const totalChars = files.reduce((acc, f) => acc + f.sizeChars, 0);
+      respond(true, { files, totalChars }, undefined);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to read workspace files: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
+  },
+
+  "sessions.memory-inject": async ({ params, respond }) => {
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const urlRaw = typeof params.url === "string" ? params.url.trim() : "";
+    if (!urlRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "url required"));
+      return;
+    }
+    const project = typeof params.project === "string" ? params.project.trim() : undefined;
+    const limit =
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : 20;
+
+    const queryParams = new URLSearchParams({ limit: String(limit) });
+    if (project) {
+      queryParams.set("project", project);
+    }
+    const contextUrl = `${urlRaw.replace(/\/$/, "")}/context?${queryParams.toString()}`;
+
+    let contextText: string;
+    let observationCount = 0;
+    try {
+      const res = await fetch(contextUrl);
+      if (!res.ok) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INTERNAL, `Engram request failed: ${res.status} ${res.statusText}`),
+        );
+        return;
+      }
+      const json = (await res.json()) as { observations?: unknown[]; context?: string };
+      observationCount = Array.isArray(json.observations) ? json.observations.length : 0;
+      contextText =
+        typeof json.context === "string"
+          ? json.context
+          : JSON.stringify(json, null, 2);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to fetch Engram context: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    const { target } = resolveGatewaySessionTargetFromKey(key);
+    const agentId = target.agentId ?? resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+
+    try {
+      fs.mkdirSync(workspaceDir, { recursive: true });
+      const memoryPath = path.join(workspaceDir, "MEMORY.md");
+      fs.writeFileSync(memoryPath, contextText, "utf-8");
+      clearBootstrapSnapshot(target.canonicalKey ?? key);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to write memory file: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+
+    respond(
+      true,
+      {
+        injected: true,
+        observations: observationCount,
+        preview: contextText.slice(0, 200),
+      },
+      undefined,
+    );
   },
 };

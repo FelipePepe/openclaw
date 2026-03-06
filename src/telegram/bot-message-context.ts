@@ -433,6 +433,25 @@ export const buildTelegramMessageContext = async ({
     bodyText = preflightTranscript;
   }
 
+  // Offline STT via Vosk — activated when messages.tts.stt.modelPath is configured.
+  // Transcribes the first audio file and replaces the body with the transcript.
+  const voskModelPath = cfg.messages?.tts?.stt?.modelPath;
+  if (hasAudio && voskModelPath && !preflightTranscript) {
+    const firstAudioPath = allMedia.find((m) => m.contentType?.startsWith("audio/"))?.path;
+    if (firstAudioPath) {
+      try {
+        const { transcribeAudio } = await import("../tts/stt.js");
+        const sttResult = await transcribeAudio({ audioFilePath: firstAudioPath, cfg });
+        if (sttResult?.text) {
+          bodyText = sttResult.text;
+          preflightTranscript = sttResult.text;
+        }
+      } catch (err) {
+        logVerbose(`telegram: Vosk STT transcription failed: ${String(err)}`);
+      }
+    }
+  }
+
   // Build bodyText fallback for messages that still have no text.
   if (!bodyText && allMedia.length > 0) {
     if (hasAudio) {
