@@ -103,6 +103,8 @@ const BASE_METHODS = [
   "sessions.bootstrap-size",
   // Tool call audit log
   "tools.audit",
+  // Memory auto-inject from Engram
+  "sessions.memory-inject",
 ];
 
 export function listGatewayMethods(): string[] {

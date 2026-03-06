@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
@@ -688,7 +689,6 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       for (const f of bootstrapFiles) {
         if (f.missing || !f.content) continue;
         const len = f.content.length;
-        // First file (AGENTS.md / soul) is treated as system prompt; rest as workspace files
         if (f.name === "AGENTS.md" || f.name === "SOUL.md") {
           systemPromptChars += len;
         } else {
@@ -700,8 +700,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     }
 
     const totalChars = systemPromptChars + workspaceFilesChars + toolResultChars + conversationChars;
-    const resolvedModel =
-      entry?.model?.trim() || undefined;
+    const resolvedModel = entry?.model?.trim() || undefined;
     const contextTokens =
       resolveContextTokensForModel({ cfg, model: resolvedModel }) ?? DEFAULT_CONTEXT_TOKENS;
     const contextWindowChars = contextTokens * 4;
@@ -756,5 +755,90 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         ),
       );
     }
+  },
+
+  "sessions.memory-inject": async ({ params, respond }) => {
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const urlRaw = typeof params.url === "string" ? params.url.trim() : "";
+    if (!urlRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "url required"));
+      return;
+    }
+    const project = typeof params.project === "string" ? params.project.trim() : undefined;
+    const limit =
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : 20;
+
+    const queryParams = new URLSearchParams({ limit: String(limit) });
+    if (project) {
+      queryParams.set("project", project);
+    }
+    const contextUrl = `${urlRaw.replace(/\/$/, "")}/context?${queryParams.toString()}`;
+
+    let contextText: string;
+    let observationCount = 0;
+    try {
+      const res = await fetch(contextUrl);
+      if (!res.ok) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INTERNAL, `Engram request failed: ${res.status} ${res.statusText}`),
+        );
+        return;
+      }
+      const json = (await res.json()) as { observations?: unknown[]; context?: string };
+      observationCount = Array.isArray(json.observations) ? json.observations.length : 0;
+      contextText =
+        typeof json.context === "string"
+          ? json.context
+          : JSON.stringify(json, null, 2);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to fetch Engram context: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    const { target } = resolveGatewaySessionTargetFromKey(key);
+    const agentId = target.agentId ?? resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+
+    try {
+      fs.mkdirSync(workspaceDir, { recursive: true });
+      const memoryPath = path.join(workspaceDir, "MEMORY.md");
+      fs.writeFileSync(memoryPath, contextText, "utf-8");
+      clearBootstrapSnapshot(target.canonicalKey ?? key);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to write memory file: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+
+    respond(
+      true,
+      {
+        injected: true,
+        observations: observationCount,
+        preview: contextText.slice(0, 200),
+      },
+      undefined,
+    );
   },
 };
