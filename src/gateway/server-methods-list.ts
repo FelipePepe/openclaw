@@ -101,6 +101,8 @@ const BASE_METHODS = [
   // Session token budget visibility
   "sessions.token-pressure",
   "sessions.bootstrap-size",
+  // Tool call audit log
+  "tools.audit",
 ];
 
 export function listGatewayMethods(): string[] {
