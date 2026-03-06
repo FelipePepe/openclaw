@@ -519,6 +519,15 @@ export type PluginHookToolResultPersistEvent = {
   message: AgentMessage;
   /** True when the tool result was synthesized by a guard/repair step. */
   isSynthetic?: boolean;
+  /**
+   * Original text character count before any in-flight truncation.
+   * Only set when the result was truncated to fit the context window.
+   * Memory plugins (e.g. Engram) can use this to decide whether to persist
+   * the full content before it is discarded.
+   */
+  originalSizeChars?: number;
+  /** True when the result was truncated before being written to the transcript. */
+  wasTruncated?: boolean;
 };
 
 export type PluginHookToolResultPersistResult = {
