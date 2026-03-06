@@ -104,11 +104,21 @@ const MemoryQmdSchema = z
   })
   .strict();
 
+const MemoryAutoInjectSchema = z
+  .object({
+    url: z.string().url(),
+    project: z.string().optional(),
+    limit: z.number().int().positive().optional(),
+  })
+  .strict()
+  .optional();
+
 const MemorySchema = z
   .object({
     backend: z.union([z.literal("builtin"), z.literal("qmd")]).optional(),
     citations: z.union([z.literal("auto"), z.literal("on"), z.literal("off")]).optional(),
     qmd: MemoryQmdSchema.optional(),
+    autoInject: MemoryAutoInjectSchema,
   })
   .strict()
   .optional();

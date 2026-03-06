@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import path from "node:path";
+import {
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../../agents/agent-scope.js";
 import { clearBootstrapSnapshot } from "../../agents/bootstrap-cache.js";
 import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../agents/pi-embedded.js";
 import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
@@ -626,5 +630,93 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         ),
       );
     }
+  },
+
+  "sessions.memory-inject": async ({ params, respond }) => {
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const urlRaw = typeof params.url === "string" ? params.url.trim() : "";
+    if (!urlRaw) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "url required"));
+      return;
+    }
+    const project = typeof params.project === "string" ? params.project.trim() : undefined;
+    const limit =
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.floor(params.limit))
+        : 20;
+
+    // Build Engram context URL
+    const queryParams = new URLSearchParams({ limit: String(limit) });
+    if (project) {
+      queryParams.set("project", project);
+    }
+    const contextUrl = `${urlRaw.replace(/\/$/, "")}/context?${queryParams.toString()}`;
+
+    let contextText: string;
+    let observationCount = 0;
+    try {
+      const res = await fetch(contextUrl);
+      if (!res.ok) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INTERNAL, `Engram request failed: ${res.status} ${res.statusText}`),
+        );
+        return;
+      }
+      const json = (await res.json()) as { observations?: unknown[]; context?: string };
+      observationCount = Array.isArray(json.observations) ? json.observations.length : 0;
+      contextText =
+        typeof json.context === "string"
+          ? json.context
+          : JSON.stringify(json, null, 2);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to fetch Engram context: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+
+    // Write context to MEMORY.md in the agent workspace
+    const cfg = loadConfig();
+    const { target } = resolveGatewaySessionTargetFromKey(key);
+    const agentId = target.agentId ?? resolveDefaultAgentId(cfg);
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+
+    try {
+      fs.mkdirSync(workspaceDir, { recursive: true });
+      const memoryPath = path.join(workspaceDir, "MEMORY.md");
+      fs.writeFileSync(memoryPath, contextText, "utf-8");
+      // Invalidate bootstrap cache so next run picks up new content
+      clearBootstrapSnapshot(target.canonicalKey ?? key);
+    } catch (err) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INTERNAL,
+          `Failed to write memory file: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+      return;
+    }
+
+    respond(
+      true,
+      {
+        injected: true,
+        observations: observationCount,
+        preview: contextText.slice(0, 200),
+      },
+      undefined,
+    );
   },
 };

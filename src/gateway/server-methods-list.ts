@@ -98,6 +98,8 @@ const BASE_METHODS = [
   "runs.list",
   // Session compaction checkpoint
   "sessions.compaction-summary",
+  // Memory auto-inject from Engram
+  "sessions.memory-inject",
 ];
 
 export function listGatewayMethods(): string[] {
