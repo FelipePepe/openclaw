@@ -98,6 +98,8 @@ const BASE_METHODS = [
   "runs.list",
   // Session compaction checkpoint
   "sessions.compaction-summary",
+  // Tool call audit log
+  "tools.audit",
 ];
 
 export function listGatewayMethods(): string[] {
