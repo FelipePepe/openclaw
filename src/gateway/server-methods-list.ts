@@ -94,6 +94,8 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  // Agent run observability
+  "runs.list",
 ];
 
 export function listGatewayMethods(): string[] {
