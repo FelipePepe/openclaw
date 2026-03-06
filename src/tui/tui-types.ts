@@ -102,6 +102,7 @@ export type TuiStateAccess = {
   autoMessageSent: boolean;
   toolsExpanded: boolean;
   showThinking: boolean;
+  ttsEnabled: boolean;
   connectionStatus: string;
   activityStatus: string;
   statusTimeout: ReturnType<typeof setTimeout> | null;

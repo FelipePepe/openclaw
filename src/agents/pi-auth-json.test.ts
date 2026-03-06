@@ -1,9 +1,22 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { saveAuthProfileStore } from "./auth-profiles.js";
+import type { readCodexCliCredentialsCached as ReadCodexCliCredentialsCachedFn } from "./cli-credentials.js";
 import { ensurePiAuthJsonFromAuthProfiles } from "./pi-auth-json.js";
+
+const mockReadCodexCli = vi.hoisted(() =>
+  vi.fn<typeof ReadCodexCliCredentialsCachedFn>(() => null),
+);
+
+vi.mock(import("./cli-credentials.js"), async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    readCodexCliCredentialsCached: mockReadCodexCli,
+  };
+});
 
 type AuthProfileStore = Parameters<typeof saveAuthProfileStore>[0];
 
@@ -202,5 +215,82 @@ describe("ensurePiAuthJsonFromAuthProfiles", () => {
     const auth = await readAuthJson(agentDir);
     expect(auth["legacy-provider"]).toMatchObject({ type: "api_key", key: "legacy-key" });
     expect(auth["openrouter"]).toMatchObject({ type: "api_key", key: "new-key" });
+  });
+});
+
+describe("ensurePiAuthJsonFromAuthProfiles — Codex CLI bridge", () => {
+  beforeEach(() => {
+    mockReadCodexCli.mockReset();
+    mockReadCodexCli.mockReturnValue(null);
+  });
+
+  it("bridges Codex CLI credentials for openai-codex when no OpenClaw profile exists", async () => {
+    const agentDir = await createAgentDir();
+    mockReadCodexCli.mockReturnValueOnce({
+      type: "oauth",
+      provider: "openai-codex" as never,
+      access: "codex-access-token",
+      refresh: "codex-refresh-token",
+      expires: Date.now() + 3_600_000,
+    });
+
+    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    expect(result.wrote).toBe(true);
+
+    const auth = await readAuthJson(agentDir);
+    expect(auth["openai-codex"]).toMatchObject({
+      type: "oauth",
+      access: "codex-access-token",
+      refresh: "codex-refresh-token",
+    });
+  });
+
+  it("skips Codex CLI bridge when openai-codex is already in OpenClaw profiles", async () => {
+    const agentDir = await createAgentDir();
+    mockReadCodexCli.mockReturnValueOnce({
+      type: "oauth",
+      provider: "openai-codex" as never,
+      access: "codex-access-token",
+      refresh: "codex-refresh-token",
+      expires: Date.now() + 3_600_000,
+    });
+
+    writeProfiles(agentDir, {
+      "openai-codex:default": {
+        type: "oauth",
+        provider: "openai-codex",
+        access: "openclaw-access-token",
+        refresh: "openclaw-refresh-token",
+        expires: Date.now() + 60_000,
+      },
+    });
+
+    await ensurePiAuthJsonFromAuthProfiles(agentDir);
+
+    const auth = await readAuthJson(agentDir);
+    // OpenClaw profile wins over Codex CLI
+    expect(auth["openai-codex"]).toMatchObject({ access: "openclaw-access-token" });
+  });
+
+  it("skips Codex CLI bridge when credentials are expired", async () => {
+    const agentDir = await createAgentDir();
+    mockReadCodexCli.mockReturnValueOnce({
+      type: "oauth",
+      provider: "openai-codex" as never,
+      access: "codex-access-token",
+      refresh: "codex-refresh-token",
+      expires: Date.now() - 1_000, // already expired
+    });
+
+    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    expect(result.wrote).toBe(false);
+  });
+
+  it("skips Codex CLI bridge when no Codex credentials exist", async () => {
+    const agentDir = await createAgentDir();
+    mockReadCodexCli.mockReturnValueOnce(null);
+
+    const result = await ensurePiAuthJsonFromAuthProfiles(agentDir);
+    expect(result.wrote).toBe(false);
   });
 });

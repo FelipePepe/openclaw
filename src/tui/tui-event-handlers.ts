@@ -29,6 +29,7 @@ type EventHandlerContext = {
   isLocalRunId?: (runId: string) => boolean;
   forgetLocalRunId?: (runId: string) => void;
   clearLocalRunIds?: () => void;
+  tts?: { speak: (text: string) => void };
 };
 
 export function createEventHandlers(context: EventHandlerContext) {
@@ -42,6 +43,7 @@ export function createEventHandlers(context: EventHandlerContext) {
     isLocalRunId,
     forgetLocalRunId,
     clearLocalRunIds,
+    tts,
   } = context;
   const finalizedRuns = new Map<string, number>();
   const sessionRuns = new Map<string, number>();
@@ -209,6 +211,9 @@ export function createEventHandlers(context: EventHandlerContext) {
         chatLog.dropAssistant(evt.runId);
       } else {
         chatLog.finalizeAssistant(finalText, evt.runId);
+        if (state.ttsEnabled && tts && stopReason !== "error") {
+          tts.speak(finalText);
+        }
       }
       finalizeRun({
         runId: evt.runId,

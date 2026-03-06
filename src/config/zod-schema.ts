@@ -104,11 +104,22 @@ const MemoryQmdSchema = z
   })
   .strict();
 
+const MemoryEngramSchema = z
+  .object({
+    url: z.string().url().optional(),
+    project: z.string().optional(),
+    maxResults: z.number().int().positive().optional(),
+    timeoutMs: z.number().int().positive().optional(),
+  })
+  .strict()
+  .optional();
+
 const MemorySchema = z
   .object({
-    backend: z.union([z.literal("builtin"), z.literal("qmd")]).optional(),
+    backend: z.union([z.literal("builtin"), z.literal("qmd"), z.literal("engram")]).optional(),
     citations: z.union([z.literal("auto"), z.literal("on"), z.literal("off")]).optional(),
     qmd: MemoryQmdSchema.optional(),
+    engram: MemoryEngramSchema,
   })
   .strict()
   .optional();
@@ -266,6 +277,18 @@ export const OpenClawSchema = z
           .object({
             name: z.string().max(50).optional(),
             avatar: z.string().max(200).optional(),
+          })
+          .strict()
+          .optional(),
+        tui: z
+          .object({
+            tts: z
+              .object({
+                enabled: z.boolean().optional(),
+                voice: z.string().max(100).optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
