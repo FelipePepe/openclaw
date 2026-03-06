@@ -96,6 +96,8 @@ const BASE_METHODS = [
   "chat.send",
   // Agent run observability
   "runs.list",
+  // Session compaction checkpoint
+  "sessions.compaction-summary",
 ];
 
 export function listGatewayMethods(): string[] {
