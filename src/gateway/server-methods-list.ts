@@ -98,6 +98,9 @@ const BASE_METHODS = [
   "runs.list",
   // Session compaction checkpoint
   "sessions.compaction-summary",
+  // Session token budget visibility
+  "sessions.token-pressure",
+  "sessions.bootstrap-size",
 ];
 
 export function listGatewayMethods(): string[] {
