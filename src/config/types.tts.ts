@@ -79,4 +79,11 @@ export type TtsConfig = {
   maxTextLength?: number;
   /** API request timeout (ms). */
   timeoutMs?: number;
+  /** Offline Speech-to-Text configuration (Vosk). */
+  stt?: {
+    /** Path to the Vosk model directory. */
+    modelPath: string;
+    /** Audio sample rate in Hz (default: 16000). */
+    sampleRate?: number;
+  };
 };

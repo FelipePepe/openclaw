@@ -242,6 +242,13 @@ export const TtsConfigSchema = z
     prefsPath: z.string().optional(),
     maxTextLength: z.number().int().min(1).optional(),
     timeoutMs: z.number().int().min(1000).max(120000).optional(),
+    stt: z
+      .object({
+        modelPath: z.string(),
+        sampleRate: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .optional();
