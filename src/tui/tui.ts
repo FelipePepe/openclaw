@@ -27,6 +27,7 @@ import { formatTokens } from "./tui-formatters.js";
 import { createLocalShellRunner } from "./tui-local-shell.js";
 import { createOverlayHandlers } from "./tui-overlays.js";
 import { createSessionActions } from "./tui-session-actions.js";
+import { createTuiTts } from "./tui-tts.js";
 import type {
   AgentSummary,
   SessionInfo,
@@ -291,6 +292,7 @@ export async function runTui(opts: TuiOptions) {
   let wasDisconnected = false;
   let toolsExpanded = false;
   let showThinking = false;
+  let ttsEnabled = config.ui?.tui?.tts?.enabled ?? false;
   let pairingHintShown = false;
   const localRunIds = new Set<string>();
 
@@ -397,6 +399,12 @@ export async function runTui(opts: TuiOptions) {
     },
     set showThinking(value) {
       showThinking = value;
+    },
+    get ttsEnabled() {
+      return ttsEnabled;
+    },
+    set ttsEnabled(value) {
+      ttsEnabled = value;
     },
     get connectionStatus() {
       return connectionStatus;
@@ -752,6 +760,7 @@ export async function runTui(opts: TuiOptions) {
     abortActive,
   } = sessionActions;
 
+  const tuiTts = createTuiTts(config);
   const { handleChatEvent, handleAgentEvent } = createEventHandlers({
     chatLog,
     tui,
@@ -762,6 +771,7 @@ export async function runTui(opts: TuiOptions) {
     isLocalRunId,
     forgetLocalRunId,
     clearLocalRunIds,
+    tts: tuiTts,
   });
 
   const requestExit = () => {

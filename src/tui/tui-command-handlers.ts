@@ -209,6 +209,12 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         currentValue: state.showThinking ? "on" : "off",
         values: ["off", "on"],
       },
+      {
+        id: "tts",
+        label: "TTS playback",
+        currentValue: state.ttsEnabled ? "on" : "off",
+        values: ["off", "on"],
+      },
     ];
     const settings = createSettingsList(
       items,
@@ -220,6 +226,9 @@ export function createCommandHandlers(context: CommandHandlerContext) {
         if (id === "thinking") {
           state.showThinking = value === "on";
           void loadHistory();
+        }
+        if (id === "tts") {
+          state.ttsEnabled = value === "on";
         }
         tui.requestRender();
       },

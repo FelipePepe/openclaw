@@ -1,4 +1,5 @@
 import type { TUI } from "@mariozechner/pi-tui";
+import { HEARTBEAT_TOKEN } from "../auto-reply/tokens.js";
 import type { SessionsPatchResult } from "../gateway/protocol/index.js";
 import {
   normalizeAgentId,
@@ -313,6 +314,10 @@ export function createSessionActions(context: SessionActionContext) {
         }
         if (message.role === "user") {
           const text = extractTextFromMessage(message);
+          // Skip heartbeat prompt injections — they're internal noise, not real user messages.
+          if (text && text.includes(HEARTBEAT_TOKEN)) {
+            continue;
+          }
           if (text) {
             chatLog.addUser(text);
           }
@@ -322,6 +327,10 @@ export function createSessionActions(context: SessionActionContext) {
           const text = extractTextFromMessage(message, {
             includeThinking: state.showThinking,
           });
+          // Skip bare HEARTBEAT_OK acknowledgements.
+          if (text && text.trim() === HEARTBEAT_TOKEN) {
+            continue;
+          }
           if (text) {
             chatLog.finalizeAssistant(text);
           }

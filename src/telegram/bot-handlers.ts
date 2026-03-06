@@ -52,6 +52,7 @@ import {
 import { migrateTelegramGroupConfig } from "./group-migration.js";
 import { resolveTelegramInlineButtonsScope } from "./inline-buttons.js";
 import {
+  buildBrowseProvidersButton,
   buildModelsKeyboard,
   buildProviderKeyboard,
   calculateTotalPages,
@@ -1048,6 +1049,12 @@ export const registerTelegramHandlers = ({
             forceWasMentioned: true,
             messageIdOverride: callback.id,
           });
+          // Update the keyboard message to confirm the selection instead of
+          // leaving it orphaned with the old model marked as current.
+          await editMessageWithButtons(
+            `✓ Model set to ${provider}/${model}`,
+            buildBrowseProvidersButton(),
+          );
           return;
         }
 
