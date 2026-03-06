@@ -42,8 +42,12 @@ function isHeartbeatNoiseEvent(evt: string): boolean {
   if (!lower) {
     return false;
   }
+  // Also match "Cron: HEARTBEAT_OK" — the label prefix ("Cron: ") is prepended
+  // by the cron session before the event text reaches this filter.
+  const afterLabel = lower.includes(": ") ? lower.slice(lower.indexOf(": ") + 2) : lower;
   return (
     isHeartbeatAckEvent(lower) ||
+    isHeartbeatAckEvent(afterLabel) ||
     lower.includes("heartbeat poll") ||
     lower.includes("heartbeat wake")
   );

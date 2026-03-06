@@ -241,8 +241,11 @@ fun RootScreen(viewModel: MainViewModel) {
             val micOk =
               ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
-            if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            viewModel.setTalkEnabled(true)
+            if (!micOk) {
+              audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+              viewModel.setTalkEnabled(true)
+            }
           } else {
             viewModel.setTalkEnabled(false)
           }

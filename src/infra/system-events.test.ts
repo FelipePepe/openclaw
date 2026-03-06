@@ -60,6 +60,9 @@ describe("isCronSystemEvent", () => {
     expect(isCronSystemEvent("heartbeat_ok")).toBe(false);
     expect(isCronSystemEvent("HEARTBEAT_OK:")).toBe(false);
     expect(isCronSystemEvent("HEARTBEAT_OK, continue")).toBe(false);
+    // "Cron: HEARTBEAT_OK" — label prefix prepended by the cron session
+    expect(isCronSystemEvent("Cron: HEARTBEAT_OK")).toBe(false);
+    expect(isCronSystemEvent("Cron: HEARTBEAT_OK 🦞")).toBe(false);
   });
 
   it("returns false for heartbeat poll and wake noise", () => {

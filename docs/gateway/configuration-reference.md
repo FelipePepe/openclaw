@@ -54,10 +54,10 @@ Use `channels.modelByChannel` to pin specific channel IDs to a model. Values acc
         "123456789012345678": "anthropic/claude-opus-4-6",
       },
       slack: {
-        C1234567890: "openai/gpt-4.1",
+        C1234567890: "github-copilot/gpt-4.1",
       },
       telegram: {
-        "-1001234567890": "openai/gpt-4.1-mini",
+        "-1001234567890": "github-copilot/gpt-4.1-mini",
         "-1001234567890:topic:99": "anthropic/claude-sonnet-4-6",
       },
     },

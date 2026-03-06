@@ -424,7 +424,9 @@ export function createOllamaStreamFn(baseUrl: string): StreamFn {
           context.systemPrompt,
         );
 
-        const ollamaTools = extractOllamaTools(context.tools);
+        // Skip tools for models that don't support the tools parameter.
+        const modelNoTools = (model as { compat?: { noTools?: boolean } }).compat?.noTools === true;
+        const ollamaTools = modelNoTools ? [] : extractOllamaTools(context.tools);
 
         // Ollama defaults to num_ctx=4096 which is too small for large
         // system prompts + many tool definitions. Use model's contextWindow.
@@ -461,7 +463,14 @@ export function createOllamaStreamFn(baseUrl: string): StreamFn {
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => "unknown error");
-          throw new Error(`Ollama API error ${response.status}: ${errorText}`);
+          const baseError = `Ollama API error ${response.status}: ${errorText}`;
+          // Provide a helpful hint when the model doesn't support tools.
+          if (response.status === 400 && errorText.includes("does not support tools")) {
+            throw new Error(
+              `${baseError}\nHint: set compat.noTools: true for this model in your openclaw config to disable tool injection.`,
+            );
+          }
+          throw new Error(baseError);
         }
 
         if (!response.body) {
