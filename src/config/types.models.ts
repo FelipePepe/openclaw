@@ -19,6 +19,8 @@ export type ModelCompatConfig = {
   requiresAssistantAfterToolResult?: boolean;
   requiresThinkingAsText?: boolean;
   requiresMistralToolIds?: boolean;
+  /** Disable tool injection for models that don't support the tools parameter (e.g. qwen:latest). */
+  noTools?: boolean;
 };
 
 export type ModelProviderAuthMode = "api-key" | "aws-sdk" | "oauth" | "token";

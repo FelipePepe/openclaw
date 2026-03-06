@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ensureAuthProfileStore } from "./auth-profiles.js";
 import type { AuthProfileCredential } from "./auth-profiles/types.js";
+import { readCodexCliCredentialsCached } from "./cli-credentials.js";
 import { normalizeProviderId } from "./model-selection.js";
 
 type AuthJsonCredential =
@@ -110,6 +111,11 @@ function credentialsEqual(a: AuthJsonCredential | undefined, b: AuthJsonCredenti
  * registry/catalog output.
  *
  * Syncs all credential types: api_key, token (as api_key), and oauth.
+ *
+ * Additionally, if no openai-codex profile is configured in OpenClaw but the
+ * user has authenticated via the Codex CLI (~/.codex/auth.json), those OAuth
+ * credentials are bridged automatically so GPT-5.3 Codex is available without
+ * requiring a separate OpenAI API key.
  */
 export async function ensurePiAuthJsonFromAuthProfiles(agentDir: string): Promise<{
   wrote: boolean;
@@ -130,6 +136,21 @@ export async function ensurePiAuthJsonFromAuthProfiles(agentDir: string): Promis
     const converted = convertCredential(cred);
     if (converted) {
       providerCredentials.set(provider, converted);
+    }
+  }
+
+  // Bridge Codex CLI credentials for openai-codex if no OpenClaw profile exists.
+  // This lets users access GPT-5.3 Codex through their existing Codex CLI session
+  // (~/.codex/auth.json) without configuring a separate OpenAI API key.
+  if (!providerCredentials.has("openai-codex")) {
+    const codexCli = readCodexCliCredentialsCached({ ttlMs: 60_000 });
+    if (codexCli && Date.now() < codexCli.expires) {
+      providerCredentials.set("openai-codex", {
+        type: "oauth",
+        access: codexCli.access,
+        refresh: codexCli.refresh,
+        expires: codexCli.expires,
+      });
     }
   }
 

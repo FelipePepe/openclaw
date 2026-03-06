@@ -156,6 +156,7 @@ fun SettingsSheet(viewModel: MainViewModel) {
 
   var pendingLocationMode by remember { mutableStateOf<LocationMode?>(null) }
   var pendingPreciseToggle by remember { mutableStateOf(false) }
+  var pendingVoiceWakeMode by remember { mutableStateOf<VoiceWakeMode?>(null) }
 
   val locationPermissionLauncher =
     rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
@@ -190,8 +191,12 @@ fun SettingsSheet(viewModel: MainViewModel) {
     }
 
   val audioPermissionLauncher =
-    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
-      // Status text is handled by NodeRuntime.
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+      val requestedMode = pendingVoiceWakeMode
+      pendingVoiceWakeMode = null
+      if (granted && requestedMode != null) {
+        viewModel.setVoiceWakeMode(requestedMode)
+      }
     }
 
   val smsPermissionAvailable =
@@ -479,9 +484,14 @@ fun SettingsSheet(viewModel: MainViewModel) {
                 val micOk =
                   ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED
-                if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                viewModel.setVoiceWakeMode(VoiceWakeMode.Foreground)
+                if (!micOk) {
+                  pendingVoiceWakeMode = VoiceWakeMode.Foreground
+                  audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                } else {
+                  viewModel.setVoiceWakeMode(VoiceWakeMode.Foreground)
+                }
               } else {
+                pendingVoiceWakeMode = null
                 viewModel.setVoiceWakeMode(VoiceWakeMode.Off)
               }
             },
@@ -502,8 +512,12 @@ fun SettingsSheet(viewModel: MainViewModel) {
                   val micOk =
                     ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                       PackageManager.PERMISSION_GRANTED
-                  if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                  viewModel.setVoiceWakeMode(VoiceWakeMode.Foreground)
+                  if (!micOk) {
+                    pendingVoiceWakeMode = VoiceWakeMode.Foreground
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                  } else {
+                    viewModel.setVoiceWakeMode(VoiceWakeMode.Foreground)
+                  }
                 },
               )
             },
@@ -518,8 +532,12 @@ fun SettingsSheet(viewModel: MainViewModel) {
                   val micOk =
                     ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                       PackageManager.PERMISSION_GRANTED
-                  if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                  viewModel.setVoiceWakeMode(VoiceWakeMode.Always)
+                  if (!micOk) {
+                    pendingVoiceWakeMode = VoiceWakeMode.Always
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                  } else {
+                    viewModel.setVoiceWakeMode(VoiceWakeMode.Always)
+                  }
                 },
               )
             },
