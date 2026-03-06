@@ -1,15 +1,12 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  resolveAgentWorkspaceDir,
-  resolveDefaultAgentId,
-} from "../../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { clearBootstrapSnapshot } from "../../agents/bootstrap-cache.js";
 import { resolveContextTokensForModel } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
-import { loadWorkspaceBootstrapFiles } from "../../agents/workspace.js";
 import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../agents/pi-embedded.js";
+import { loadWorkspaceBootstrapFiles } from "../../agents/workspace.js";
 import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
 import { clearSessionQueues } from "../../auto-reply/reply/queue.js";
 import { loadConfig } from "../../config/config.js";
@@ -597,9 +594,20 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     if (!key) {
       return;
     }
-    const { target } = resolveGatewaySessionTargetFromKey(key);
-    const candidates = resolveSessionTranscriptCandidates({ cfg: loadConfig(), target });
-    const sessionFile = candidates[0];
+    const { target, storePath } = resolveGatewaySessionTargetFromKey(key);
+    const store = loadSessionStore(storePath);
+    const entry = target.storeKeys.map((storeKey) => store[storeKey]).find(Boolean);
+    const sessionId = entry?.sessionId;
+    if (!sessionId) {
+      respond(true, { summary: null, compactedAt: null }, undefined);
+      return;
+    }
+    const sessionFile = resolveSessionTranscriptCandidates(
+      sessionId,
+      storePath,
+      entry?.sessionFile,
+      target.agentId,
+    ).find((candidate) => fs.existsSync(candidate));
     if (!sessionFile || !fs.existsSync(sessionFile)) {
       respond(true, { summary: null, compactedAt: null }, undefined);
       return;
@@ -628,7 +636,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INTERNAL,
+          ErrorCodes.UNAVAILABLE,
           `Failed to read session transcript: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
@@ -660,7 +668,9 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         const raw = fs.readFileSync(filePath, "utf-8");
         for (const line of raw.split(/\r?\n/)) {
           const trimmed = line.trim();
-          if (!trimmed) continue;
+          if (!trimmed) {
+            continue;
+          }
           try {
             const parsed = JSON.parse(trimmed) as { role?: string; type?: string };
             const isToolResult =
@@ -687,7 +697,9 @@ export const sessionsHandlers: GatewayRequestHandlers = {
     try {
       const bootstrapFiles = await loadWorkspaceBootstrapFiles(workspaceDir);
       for (const f of bootstrapFiles) {
-        if (f.missing || !f.content) continue;
+        if (f.missing || !f.content) {
+          continue;
+        }
         const len = f.content.length;
         if (f.name === "AGENTS.md" || f.name === "SOUL.md") {
           systemPromptChars += len;
@@ -699,16 +711,15 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       // ignore workspace read errors
     }
 
-    const totalChars = systemPromptChars + workspaceFilesChars + toolResultChars + conversationChars;
+    const totalChars =
+      systemPromptChars + workspaceFilesChars + toolResultChars + conversationChars;
     const resolvedModel = entry?.model?.trim() || undefined;
     const contextTokens =
       resolveContextTokensForModel({ cfg, model: resolvedModel }) ?? DEFAULT_CONTEXT_TOKENS;
     const contextWindowChars = contextTokens * 4;
 
     function pct(chars: number) {
-      return contextWindowChars > 0
-        ? Math.round((chars / contextWindowChars) * 1000) / 10
-        : 0;
+      return contextWindowChars > 0 ? Math.round((chars / contextWindowChars) * 1000) / 10 : 0;
     }
 
     respond(
@@ -750,7 +761,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INTERNAL,
+          ErrorCodes.UNAVAILABLE,
           `Failed to read workspace files: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
@@ -787,22 +798,22 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         respond(
           false,
           undefined,
-          errorShape(ErrorCodes.INTERNAL, `Engram request failed: ${res.status} ${res.statusText}`),
+          errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Engram request failed: ${res.status} ${res.statusText}`,
+          ),
         );
         return;
       }
       const json = (await res.json()) as { observations?: unknown[]; context?: string };
       observationCount = Array.isArray(json.observations) ? json.observations.length : 0;
-      contextText =
-        typeof json.context === "string"
-          ? json.context
-          : JSON.stringify(json, null, 2);
+      contextText = typeof json.context === "string" ? json.context : JSON.stringify(json, null, 2);
     } catch (err) {
       respond(
         false,
         undefined,
         errorShape(
-          ErrorCodes.INTERNAL,
+          ErrorCodes.UNAVAILABLE,
           `Failed to fetch Engram context: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
@@ -824,7 +835,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INTERNAL,
+          ErrorCodes.UNAVAILABLE,
           `Failed to write memory file: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );

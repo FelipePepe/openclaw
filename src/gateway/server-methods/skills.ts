@@ -7,12 +7,12 @@ import {
 import { installSkill } from "../../agents/skills-install.js";
 import { buildWorkspaceSkillStatus } from "../../agents/skills-status.js";
 import { loadWorkspaceSkillEntries, type SkillEntry } from "../../agents/skills.js";
-import { scanDirectoryWithSummary } from "../../security/skill-scanner.js";
 import { listAgentWorkspaceDirs } from "../../agents/workspace-dirs.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
 import { getRemoteSkillEligibility } from "../../infra/skills-remote.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
+import { scanDirectoryWithSummary } from "../../security/skill-scanner.js";
 import { normalizeSecretInput } from "../../utils/normalize-secret-input.js";
 import {
   ErrorCodes,
@@ -216,14 +216,12 @@ export const skillsHandlers: GatewayRequestHandlers = {
 
     let entries: SkillEntry[];
     try {
-      entries = await loadWorkspaceSkillEntries(workspaceDir, cfg);
+      entries = loadWorkspaceSkillEntries(workspaceDir, { config: cfg });
     } catch {
       entries = [];
     }
 
-    const matched = entries.find(
-      (e) => e.skill.name === slug || e.metadata?.skillKey === slug,
-    );
+    const matched = entries.find((e) => e.skill.name === slug || e.metadata?.skillKey === slug);
 
     if (!matched) {
       respond(
@@ -239,7 +237,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INTERNAL, `skill "${slug}" has no base directory`),
+        errorShape(ErrorCodes.UNAVAILABLE, `skill "${slug}" has no base directory`),
       );
       return;
     }
@@ -272,7 +270,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
         false,
         undefined,
         errorShape(
-          ErrorCodes.INTERNAL,
+          ErrorCodes.UNAVAILABLE,
           `Scan failed: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );

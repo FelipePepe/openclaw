@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { createRequire } from "node:module";
 
 export type VoskSTTConfig = {
   modelPath: string;
@@ -23,6 +22,7 @@ export async function transcribeWithVosk(params: {
   audioFilePath: string;
   config: VoskSTTConfig;
 }): Promise<string> {
+  const require = createRequire(import.meta.url);
   const sampleRate = params.config.sampleRate ?? 16000;
 
   // Convert audio to raw PCM via ffmpeg
@@ -38,21 +38,33 @@ export async function transcribeWithVosk(params: {
     "pipe:1",
   ]);
 
-  // Dynamic import so missing vosk package doesn't crash the module at load time
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const vosk = await import("vosk").catch(() => {
+  type VoskModule = {
+    Model: new (modelPath: string) => unknown;
+    KaldiRecognizer: new (
+      model: unknown,
+      sampleRate: number,
+    ) => {
+      acceptWaveform: (chunk: Buffer) => void;
+      finalResult: () => { text?: string };
+    };
+  };
+
+  let vosk: VoskModule;
+  try {
+    vosk = require("vosk") as VoskModule;
+  } catch {
     throw new Error(
-      'Vosk is not installed. Run: npm install vosk\n' +
-        'Then download a model with: openclaw voice-setup',
+      "Vosk is not installed. Run: npm install vosk\n" +
+        "Then download a model with: openclaw voice-setup",
     );
-  });
+  }
 
   const { Model, KaldiRecognizer } = vosk;
 
   if (!fs.existsSync(params.config.modelPath)) {
     throw new Error(
       `Vosk model not found at: ${params.config.modelPath}\n` +
-        'Download a model with: openclaw voice-setup',
+        "Download a model with: openclaw voice-setup",
     );
   }
 
@@ -67,6 +79,6 @@ export async function transcribeWithVosk(params: {
     offset += CHUNK_SIZE;
   }
 
-  const result = rec.finalResult() as { text?: string };
+  const result = rec.finalResult();
   return result.text?.trim() ?? "";
 }
