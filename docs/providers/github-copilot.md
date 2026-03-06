@@ -52,14 +52,14 @@ openclaw models auth login-github-copilot --yes
 ## Set a default model
 
 ```bash
-openclaw models set github-copilot/gpt-4o
+openclaw models set github-copilot/gpt-4.1
 ```
 
 ### Config snippet
 
 ```json5
 {
-  agents: { defaults: { model: { primary: "github-copilot/gpt-4o" } } },
+  agents: { defaults: { model: { primary: "github-copilot/gpt-4.1" } } },
 }
 ```
 
