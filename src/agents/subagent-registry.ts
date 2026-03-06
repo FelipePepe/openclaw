@@ -938,3 +938,37 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
 export function initSubagentRegistry() {
   restoreSubagentRunsOnce();
 }
+
+const MAX_ALL_RUNS_LIMIT = 500;
+
+export function listAllSubagentRuns(params?: {
+  activeOnly?: boolean;
+  recentMinutes?: number;
+  limit?: number;
+}): SubagentRunRecord[] {
+  const snapshot = getSubagentRunsSnapshotForRead(subagentRuns);
+  const now = Date.now();
+  const cutoffMs =
+    typeof params?.recentMinutes === "number" && params.recentMinutes > 0
+      ? now - params.recentMinutes * 60_000
+      : 0;
+
+  let runs = [...snapshot.values()];
+
+  if (params?.activeOnly) {
+    runs = runs.filter((r) => typeof r.endedAt !== "number");
+  }
+
+  if (cutoffMs > 0) {
+    runs = runs.filter((r) => (r.endedAt ?? r.createdAt) >= cutoffMs);
+  }
+
+  runs.sort((a, b) => b.createdAt - a.createdAt);
+
+  const limit = Math.min(
+    typeof params?.limit === "number" && params.limit > 0 ? params.limit : MAX_ALL_RUNS_LIMIT,
+    MAX_ALL_RUNS_LIMIT,
+  );
+
+  return runs.slice(0, limit);
+}
