@@ -85,6 +85,14 @@ export type OpenClawConfig = {
       /** Assistant avatar (emoji, short text, or image URL/data URI). */
       avatar?: string;
     };
+    tui?: {
+      tts?: {
+        /** Enable TTS playback for assistant replies in the TUI. */
+        enabled?: boolean;
+        /** Edge TTS voice name (e.g., es-ES-ElviraNeural). */
+        voice?: string;
+      };
+    };
   };
   skills?: SkillsConfig;
   plugins?: PluginsConfig;
