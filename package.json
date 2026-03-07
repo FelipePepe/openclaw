@@ -1,10 +1,6 @@
 {
   "name": "openclaw",
-<<<<<<< HEAD
   "version": "2026.3.6",
-=======
-  "version": "2026.3.6",
->>>>>>> origin/develop
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
   "homepage": "https://github.com/openclaw/openclaw#readme",
