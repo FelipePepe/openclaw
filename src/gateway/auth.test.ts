@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import {
+  assertGatewayAuthConfigured,
   authorizeGatewayConnect,
   authorizeHttpGatewayConnect,
   authorizeWsControlUiGatewayConnect,
@@ -535,5 +536,74 @@ describe("trusted-proxy auth", () => {
 
     expect(res.ok).toBe(true);
     expect(res.user).toBe("nick@example.com");
+  });
+});
+
+describe("multi-user RBAC", () => {
+  const usersAuth = {
+    mode: "token" as const,
+    allowTailscale: false,
+    users: {
+      alice: { token: "alice-token", scopes: ["operator.admin", "operator.read"] },
+      bob: { token: "bob-token", scopes: ["operator.read"] },
+    },
+  };
+
+  it("grants correct scopes when user token matches", async () => {
+    const res = await authorizeGatewayConnect({
+      auth: usersAuth,
+      connectAuth: { token: "alice-token" },
+    });
+    expect(res.ok).toBe(true);
+    expect(res.user).toBe("alice");
+    expect(res.scopes).toEqual(["operator.admin", "operator.read"]);
+  });
+
+  it("returns different scopes for different users", async () => {
+    const res = await authorizeGatewayConnect({
+      auth: usersAuth,
+      connectAuth: { token: "bob-token" },
+    });
+    expect(res.ok).toBe(true);
+    expect(res.user).toBe("bob");
+    expect(res.scopes).toEqual(["operator.read"]);
+  });
+
+  it("falls back to global token when no user token matches", async () => {
+    const res = await authorizeGatewayConnect({
+      auth: { ...usersAuth, token: "global-token" },
+      connectAuth: { token: "global-token" },
+    });
+    expect(res.ok).toBe(true);
+    expect(res.user).toBeUndefined();
+    expect(res.scopes).toBeUndefined(); // no scopes = all scopes (backward compat)
+  });
+
+  it("rejects unknown token when no match in users or global", async () => {
+    const res = await authorizeGatewayConnect({
+      auth: usersAuth,
+      connectAuth: { token: "unknown-token" },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("token_mismatch");
+  });
+
+  it("rejects when no token provided", async () => {
+    const res = await authorizeGatewayConnect({
+      auth: usersAuth,
+      connectAuth: {},
+    });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe("token_missing");
+  });
+
+  it("assertGatewayAuthConfigured passes with users but no global token", () => {
+    expect(() =>
+      assertGatewayAuthConfigured({
+        mode: "token",
+        allowTailscale: false,
+        users: { alice: { token: "t", scopes: ["operator.read"] } },
+      }),
+    ).not.toThrow();
   });
 });
