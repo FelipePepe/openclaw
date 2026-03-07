@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlink } from "node:fs";
 import path from "node:path";
 import { EdgeTTS } from "node-edge-tts";
 import type { OpenClawConfig } from "../config/config.js";
@@ -42,10 +42,12 @@ async function renderTtsToFile(text: string, voice: string) {
     outputFormat: DEFAULT_OUTPUT_FORMAT,
   });
   await tts.ttsPromise(text, file);
+  // Delete the temp file after 5 minutes to avoid accumulation in /tmp
+  setTimeout(() => unlink(file, () => {}), 5 * 60 * 1000).unref();
   return file;
 }
 
-function playFile(file: string): Promise<void> {
+function playFile(file: string, onSpawn: (child: ChildProcess) => void): Promise<void> {
   return new Promise((resolve) => {
     let idx = 0;
     const tryNext = () => {
@@ -57,6 +59,7 @@ function playFile(file: string): Promise<void> {
       const candidate = PLAYER_CANDIDATES[idx++];
       const args = [...candidate.args, file];
       const child = spawn(candidate.cmd, args, { stdio: "ignore" });
+      onSpawn(child);
       child.on("error", (err) => {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") {
           tryNext();
@@ -73,27 +76,43 @@ function playFile(file: string): Promise<void> {
 
 export function createTuiTts(config: OpenClawConfig): TuiTts {
   const voice = config.ui?.tui?.tts?.voice ?? DEFAULT_VOICE;
-  let busy = false;
+  // generation is incremented on each speak() call so stale renders are discarded
+  let generation = 0;
+  let currentPlayer: ChildProcess | null = null;
 
   const speak = (raw: string) => {
-    if (busy) {
-      return;
-    }
     const cleaned = stripMarkdown(raw).trim();
     if (!cleaned) {
       return;
     }
     const text =
       cleaned.length > DEFAULT_MAX_LEN ? `${cleaned.slice(0, DEFAULT_MAX_LEN)}…` : cleaned;
-    busy = true;
+
+    // Stop any audio currently playing so the new response is heard immediately
+    currentPlayer?.kill();
+    currentPlayer = null;
+    const myGen = ++generation;
+
     void (async () => {
       try {
         const file = await renderTtsToFile(text, voice);
-        await playFile(file);
+        // If a newer speak() was called while rendering, discard this result
+        if (myGen !== generation) {
+          return;
+        }
+        await playFile(file, (child) => {
+          if (myGen !== generation) {
+            child.kill();
+            return;
+          }
+          currentPlayer = child;
+        });
       } catch (err) {
         log.warn(`TUI TTS failed: ${String(err)}`);
       } finally {
-        busy = false;
+        if (myGen === generation) {
+          currentPlayer = null;
+        }
       }
     })();
   };
