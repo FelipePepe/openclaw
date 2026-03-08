@@ -466,7 +466,12 @@ export async function authorizeGatewayConnect(
     // Fall back to global shared token (backward compat — grants all scopes).
     if (!auth.token) {
       limiter?.recordFailure(ip, rateLimitScope);
-      return { ok: false, reason: "token_mismatch" };
+      // If there are no per-user entries either, the server has no token configured at all.
+      const reason =
+        auth.users && Object.keys(auth.users).length > 0
+          ? "token_mismatch"
+          : "token_missing_config";
+      return { ok: false, reason };
     }
     if (!safeEqualSecret(connectAuth.token, auth.token)) {
       limiter?.recordFailure(ip, rateLimitScope);
