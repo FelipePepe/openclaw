@@ -34,6 +34,8 @@ export type ResolvedGatewayAuth = {
   password?: string;
   allowTailscale: boolean;
   trustedProxy?: GatewayTrustedProxyConfig;
+  /** Per-user token→scopes map for multi-user RBAC. */
+  users?: Record<string, { token: string; scopes: string[] }>;
 };
 
 export type GatewayAuthResult = {
@@ -45,6 +47,12 @@ export type GatewayAuthResult = {
   rateLimited?: boolean;
   /** Milliseconds the client should wait before retrying (when rate-limited). */
   retryAfterMs?: number;
+  /**
+   * Operator scopes granted to this connection.
+   * Absent means the caller should apply the default (all scopes).
+   * Present means enforce only the listed scopes.
+   */
+  scopes?: string[];
 };
 
 type ConnectAuth = {
@@ -278,6 +286,9 @@ export function resolveGatewayAuth(params: {
     authConfig.allowTailscale ??
     (params.tailscaleMode === "serve" && mode !== "password" && mode !== "trusted-proxy");
 
+  // Carry the users map through so authorizeGatewayConnect can resolve per-user scopes.
+  const users = authConfig.users as ResolvedGatewayAuth["users"] | undefined;
+
   return {
     mode,
     modeSource,
@@ -285,6 +296,7 @@ export function resolveGatewayAuth(params: {
     password,
     allowTailscale,
     trustedProxy,
+    users,
   };
 }
 
@@ -293,8 +305,12 @@ export function assertGatewayAuthConfigured(auth: ResolvedGatewayAuth): void {
     if (auth.allowTailscale) {
       return;
     }
+    // Multi-user mode: per-user tokens satisfy the requirement even without a global token.
+    if (auth.users && Object.keys(auth.users).length > 0) {
+      return;
+    }
     throw new Error(
-      "gateway auth mode is token, but no token was configured (set gateway.auth.token or OPENCLAW_GATEWAY_TOKEN)",
+      "gateway auth mode is token, but no token was configured (set gateway.auth.token, OPENCLAW_GATEWAY_TOKEN, or gateway.auth.users)",
     );
   }
   if (auth.mode === "password" && !auth.password) {
@@ -432,12 +448,30 @@ export async function authorizeGatewayConnect(
   }
 
   if (auth.mode === "token") {
-    if (!auth.token) {
-      return { ok: false, reason: "token_missing_config" };
-    }
     if (!connectAuth?.token) {
       limiter?.recordFailure(ip, rateLimitScope);
       return { ok: false, reason: "token_missing" };
+    }
+
+    // Check per-user tokens first (multi-user RBAC).
+    if (auth.users) {
+      for (const [username, user] of Object.entries(auth.users)) {
+        if (user.token && safeEqualSecret(connectAuth.token, user.token)) {
+          limiter?.reset(ip, rateLimitScope);
+          return { ok: true, method: "token", user: username, scopes: user.scopes };
+        }
+      }
+    }
+
+    // Fall back to global shared token (backward compat — grants all scopes).
+    if (!auth.token) {
+      limiter?.recordFailure(ip, rateLimitScope);
+      // If there are no per-user entries either, the server has no token configured at all.
+      const reason =
+        auth.users && Object.keys(auth.users).length > 0
+          ? "token_mismatch"
+          : "token_missing_config";
+      return { ok: false, reason };
     }
     if (!safeEqualSecret(connectAuth.token, auth.token)) {
       limiter?.recordFailure(ip, rateLimitScope);
