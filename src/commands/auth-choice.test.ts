@@ -787,7 +787,7 @@ describe("applyAuthChoice", () => {
       });
 
       expect(resolveAgentModelPrimaryValue(result.config.agents?.defaults?.model)).toBe(
-        "github-copilot/gpt-4o",
+        "github-copilot/gpt-4.1",
       );
     } finally {
       if (previousIsTTYDescriptor) {
