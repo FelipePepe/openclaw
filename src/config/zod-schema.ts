@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { A2ASchema } from "./zod-schema.a2a.js";
 import { ToolsSchema } from "./zod-schema.agent-runtime.js";
 import { AgentsSchema, AudioSchema, BindingsSchema, BroadcastSchema } from "./zod-schema.agents.js";
 import { ApprovalsSchema } from "./zod-schema.approvals.js";
@@ -624,6 +625,7 @@ export const OpenClawSchema = z
       .strict()
       .optional(),
     memory: MemorySchema,
+    a2a: A2ASchema,
     skills: z
       .object({
         allowBundled: z.array(z.string()).optional(),

@@ -39,7 +39,11 @@ export class A2ASupervisor {
   }
 
   async run(request: A2ARunRequest): Promise<A2ARunResult> {
-    const plan = await this.plan({ message: request.message, constraints: request.constraints });
+    const plan = await this.plan({
+      runId: request.runId,
+      message: request.message,
+      constraints: request.constraints,
+    });
     const buildEvents = (await this.deps.builder.build?.(plan.tasks)) ?? [];
     await Promise.all(buildEvents.map((event) => this.deps.store.saveStatus(event)));
 

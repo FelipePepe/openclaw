@@ -104,6 +104,11 @@ const BASE_METHODS = [
   "sessions.bootstrap-size",
   // Tool call audit log
   "tools.audit",
+  "a2a.plan",
+  "a2a.run",
+  "a2a.tasks.get",
+  "a2a.runs.events",
+  "a2a.artifacts.get",
   // Memory auto-inject from Engram
   "sessions.memory-inject",
 ];

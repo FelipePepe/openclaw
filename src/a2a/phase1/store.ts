@@ -40,7 +40,7 @@ export class InMemoryA2AStore implements A2AStore {
     return Array.from(this.tasks.values());
   }
 
-  async listStatusEvents(): Promise<A2ATaskStatusEvent[]> {
+  async listStatusEvents(_runId?: string): Promise<A2ATaskStatusEvent[]> {
     return this.statusEvents.slice();
   }
 

@@ -1355,4 +1355,8 @@ export const FIELD_HELP: Record<string, string> = {
     'Direct message access control ("pairing" recommended). "open" requires channels.slack.allowFrom=["*"] (legacy: channels.slack.dm.allowFrom).',
   "channels.slack.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.slack.allowFrom=["*"].',
+  a2a: "Agent-to-agent orchestration settings for the A2A supervisor flow. Keep disabled unless you are explicitly using A2A phase features.",
+  "a2a.phase1": "Phase 1 feature flag group for in-process A2A planning and execution endpoints.",
+  "a2a.phase1.enabled":
+    "Enable Phase 1 A2A supervisor endpoints and internal APIs. Keep disabled in production unless you are actively testing A2A flows.",
 };

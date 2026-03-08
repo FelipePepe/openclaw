@@ -53,6 +53,9 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "tts.providers",
     "models.list",
     "tools.catalog",
+    "a2a.tasks.get",
+    "a2a.runs.events",
+    "a2a.artifacts.get",
     "agents.list",
     "agent.identity.get",
     "skills.status",
@@ -92,6 +95,8 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "chat.send",
     "chat.abort",
     "browser.request",
+    "a2a.plan",
+    "a2a.run",
     "push.test",
   ],
   [ADMIN_SCOPE]: [
