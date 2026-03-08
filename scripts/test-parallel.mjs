@@ -64,6 +64,16 @@ const unitIsolatedFilesRaw = [
 ];
 const unitIsolatedFiles = unitIsolatedFilesRaw.filter((file) => fs.existsSync(file));
 
+// Extension tests that fail under vmForks (vi.mock/module resolution, SDK isPrivateIpAddress).
+// Run these with --pool=forks for determinism.
+const extensionsIsolatedFilesRaw = [
+  "extensions/bluebubbles/src/attachments.test.ts",
+  "extensions/bluebubbles/src/chat.test.ts",
+  "extensions/bluebubbles/src/media-send.test.ts",
+  "extensions/msteams/src/attachments/shared.test.ts",
+];
+const extensionsIsolatedFiles = extensionsIsolatedFilesRaw.filter((file) => fs.existsSync(file));
+
 const children = new Set();
 const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 const isMacOS = process.platform === "darwin" || process.env.RUNNER_OS === "macOS";
@@ -119,8 +129,26 @@ const runs = [
       "--config",
       "vitest.extensions.config.ts",
       ...(useVmForks ? ["--pool=vmForks"] : []),
+      ...(useVmForks && extensionsIsolatedFiles.length > 0
+        ? extensionsIsolatedFiles.flatMap((file) => ["--exclude", file])
+        : []),
     ],
   },
+  ...(useVmForks && extensionsIsolatedFiles.length > 0
+    ? [
+        {
+          name: "extensions-isolated",
+          args: [
+            "vitest",
+            "run",
+            "--config",
+            "vitest.extensions.config.ts",
+            "--pool=forks",
+            ...extensionsIsolatedFiles,
+          ],
+        },
+      ]
+    : []),
   {
     name: "gateway",
     args: [
@@ -241,6 +269,9 @@ const maxWorkersForRun = (name) => {
     return 1;
   }
   if (name === "unit-isolated") {
+    return defaultWorkerBudget.unitIsolated;
+  }
+  if (name === "extensions-isolated") {
     return defaultWorkerBudget.unitIsolated;
   }
   if (name === "extensions") {

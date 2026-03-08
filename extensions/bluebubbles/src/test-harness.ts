@@ -69,7 +69,7 @@ export function installBlueBubblesFetchTestHooks(params: {
   beforeEach(() => {
     vi.stubGlobal("fetch", params.mockFetch);
     params.mockFetch.mockReset();
-    params.privateApiStatusMock.mockReset();
+    params.privateApiStatusMock.mockReset?.();
     params.privateApiStatusMock.mockReturnValue(BLUE_BUBBLES_PRIVATE_API_STATUS.unknown);
   });
 
