@@ -50,6 +50,7 @@ describe("tui-event-handlers: handleAgentEvent", () => {
     autoMessageSent: false,
     toolsExpanded: false,
     showThinking: false,
+    ttsEnabled: false,
     connectionStatus: "connected",
     activityStatus: "idle",
     statusTimeout: null,
