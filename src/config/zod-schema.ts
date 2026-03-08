@@ -489,6 +489,27 @@ export const OpenClawSchema = z
               })
               .strict()
               .optional(),
+            users: z
+              .record(
+                z.string(),
+                z
+                  .object({
+                    token: z.string().min(1).register(sensitive),
+                    scopes: z
+                      .array(
+                        z.enum([
+                          "operator.admin",
+                          "operator.read",
+                          "operator.write",
+                          "operator.approvals",
+                          "operator.pairing",
+                        ]),
+                      )
+                      .min(1, "each user must have at least one scope"),
+                  })
+                  .strict(),
+              )
+              .optional(),
           })
           .strict()
           .optional(),

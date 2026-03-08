@@ -66,6 +66,7 @@ export const FIELD_LABELS: Record<string, string> = {
   "gateway.auth.allowTailscale": "Gateway Auth Allow Tailscale Identity",
   "gateway.auth.rateLimit": "Gateway Auth Rate Limit",
   "gateway.auth.trustedProxy": "Gateway Trusted Proxy Auth",
+  "gateway.auth.users": "Gateway Multi-User Access Control",
   "gateway.trustedProxies": "Gateway Trusted Proxy CIDRs",
   "gateway.allowRealIpFallback": "Gateway Allow x-real-ip Fallback",
   "gateway.tools": "Gateway Tool Exposure Policy",

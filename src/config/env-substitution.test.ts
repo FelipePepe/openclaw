@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { MissingEnvVarError, resolveConfigEnvVars } from "./env-substitution.js";
+import {
+  MissingEnvVarError,
+  MissingSecretFileError,
+  containsEnvVarReference,
+  resolveConfigEnvVars,
+} from "./env-substitution.js";
 
 describe("resolveConfigEnvVars", () => {
   describe("basic substitution", () => {
@@ -206,6 +211,93 @@ describe("resolveConfigEnvVars", () => {
     it("passes through non-string values in objects", () => {
       const result = resolveConfigEnvVars({ num: 42, bool: true, nil: null, arr: [1, 2] }, {});
       expect(result).toEqual({ num: 42, bool: true, nil: null, arr: [1, 2] });
+    });
+  });
+
+  describe("file reference substitution", () => {
+    it("substitutes ${file:/path} with trimmed file content", () => {
+      const readFile = (p: string) => (p === "/run/secrets/token" ? "  secret123\n" : "");
+      const result = resolveConfigEnvVars(
+        { key: "${file:/run/secrets/token}" },
+        {},
+        { readFile },
+      );
+      expect(result).toEqual({ key: "secret123" });
+    });
+
+    it("mixes env vars and file refs in same config", () => {
+      const readFile = (p: string) => (p === "/secrets/slack" ? "xoxb-slack-token" : "");
+      const result = resolveConfigEnvVars(
+        {
+          channels: {
+            telegram: { botToken: "${TELEGRAM_TOKEN}" },
+            slack: { botToken: "${file:/secrets/slack}" },
+          },
+        },
+        { TELEGRAM_TOKEN: "tg-token" },
+        { readFile },
+      );
+      expect(result).toEqual({
+        channels: {
+          telegram: { botToken: "tg-token" },
+          slack: { botToken: "xoxb-slack-token" },
+        },
+      });
+    });
+
+    it("throws MissingSecretFileError when file cannot be read", () => {
+      const readFile = (_p: string) => {
+        throw new Error("ENOENT: no such file or directory");
+      };
+      expect(() =>
+        resolveConfigEnvVars({ key: "${file:/missing/secret}" }, {}, { readFile }),
+      ).toThrow(MissingSecretFileError);
+    });
+
+    it("throws MissingSecretFileError when file is empty", () => {
+      const readFile = (_p: string) => "   \n  ";
+      expect(() =>
+        resolveConfigEnvVars({ key: "${file:/empty/secret}" }, {}, { readFile }),
+      ).toThrow(MissingSecretFileError);
+    });
+
+    it("includes file path in MissingSecretFileError", () => {
+      const readFile = (_p: string) => {
+        throw new Error("ENOENT");
+      };
+      try {
+        resolveConfigEnvVars({ key: "${file:/my/secret}" }, {}, { readFile });
+        throw new Error("Expected to throw");
+      } catch (err) {
+        expect(err).toBeInstanceOf(MissingSecretFileError);
+        const error = err as MissingSecretFileError;
+        expect(error.filePath).toBe("/my/secret");
+        expect(error.configPath).toBe("key");
+      }
+    });
+
+    it("ignores ${file:} with empty path (treated as non-matching)", () => {
+      const readFile = (_p: string) => "secret";
+      const result = resolveConfigEnvVars({ key: "${file:}" }, {}, { readFile });
+      expect(result).toEqual({ key: "${file:}" });
+    });
+  });
+
+  describe("containsEnvVarReference", () => {
+    it("returns true for ${VAR_NAME}", () => {
+      expect(containsEnvVarReference("${FOO}")).toBe(true);
+    });
+
+    it("returns true for ${file:/path}", () => {
+      expect(containsEnvVarReference("${file:/run/secrets/token}")).toBe(true);
+    });
+
+    it("returns false for plain strings", () => {
+      expect(containsEnvVarReference("plaintext-secret")).toBe(false);
+    });
+
+    it("returns false for escaped $${VAR}", () => {
+      expect(containsEnvVarReference("$${ESCAPED}")).toBe(false);
     });
   });
 

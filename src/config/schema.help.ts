@@ -79,6 +79,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Login/auth attempt throttling controls to reduce credential brute-force risk at the gateway boundary. Keep enabled in exposed environments and tune thresholds to your traffic baseline.",
   "gateway.auth.trustedProxy":
     "Trusted-proxy auth header mapping for upstream identity providers that inject user claims. Use only with known proxy CIDRs and strict header allowlists to prevent spoofed identity headers.",
+  "gateway.auth.users":
+    'Per-user tokens and operator scopes for multi-user RBAC. Each entry maps a username to a token (use ${ENV_VAR} or ${file:/path} to avoid plaintext) and the scopes they are granted. The global auth.token remains valid and grants all scopes for backward compatibility. Available scopes: operator.admin, operator.read, operator.write, operator.approvals, operator.pairing.',
   "gateway.trustedProxies":
     "CIDR/IP allowlist of upstream proxies permitted to provide forwarded client identity headers. Keep this list narrow so untrusted hops cannot impersonate users.",
   "gateway.allowRealIpFallback":
