@@ -107,10 +107,40 @@ export type GatewayTrustedProxyConfig = {
   allowUsers?: string[];
 };
 
+/**
+ * Per-user configuration for multi-user gateway access.
+ * Each user has their own token and a set of operator scopes that
+ * control which gateway methods they can invoke.
+ *
+ * @example
+ * ```json5
+ * {
+ *   gateway: {
+ *     auth: {
+ *       users: {
+ *         "alice": { token: "${ALICE_TOKEN}", scopes: ["operator.admin"] },
+ *         "bob":   { token: "${BOB_TOKEN}",   scopes: ["operator.read"] }
+ *       }
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export type GatewayUserConfig = {
+  /** Per-user token. Use \`${ENV_VAR}\` or \`${file:/path}\` to avoid plaintext. */
+  token: string;
+  /**
+   * Operator scopes granted to this user.
+   * Available: operator.admin | operator.read | operator.write |
+   *            operator.approvals | operator.pairing
+   */
+  scopes: string[];
+};
+
 export type GatewayAuthConfig = {
   /** Authentication mode for Gateway connections. Defaults to token when unset. */
   mode?: GatewayAuthMode;
-  /** Shared token for token mode (stored locally for CLI auth). */
+  /** Shared token for token mode (stored locally for CLI auth). Gets all scopes. */
   token?: string;
   /** Shared password for password mode (consider env instead). */
   password?: string;
@@ -123,6 +153,12 @@ export type GatewayAuthConfig = {
    * Required when mode is "trusted-proxy".
    */
   trustedProxy?: GatewayTrustedProxyConfig;
+  /**
+   * Multi-user access control. Each entry maps a username to their token
+   * and the operator scopes they are granted.
+   * When set, the global `token` is still valid and grants all scopes.
+   */
+  users?: Record<string, GatewayUserConfig>;
 };
 
 export type GatewayAuthRateLimitConfig = {
